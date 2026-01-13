@@ -1,0 +1,344 @@
+---
+title: "DAT 201 Final Project"
+author: "Josina Jose"
+subject: Life Expectiences and Term Life Insurance
+output:
+  word_document: default
+  pdf_document: default
+---
+
+
+### Install & Load Required Packages ---
+
+```{r setup, include=FALSE}
+required_packages <- c("tidyverse", "readr", "ggplot2", "naniar", "gtExtras", 
+                       "ggcorrplot", "car", "lmtest", "gridExtra")
+```
+
+
+
+```{r cars}
+# Load libraries
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(naniar)
+library(gtExtras)
+library(ggcorrplot)
+library(car)
+library(gridExtra)
+```
+
+# QUESTION 1: NATIONAL LIFE EXPECTANCY ANALYSIS
+
+## 1.1 Data Import and Cleaning
+
+```{r pressure, echo=FALSE}
+file_path <- "D:/Josina/McMaster University/201- Data Modeling/Final Project/UNLifeExpectancy.csv"
+National_Life_Expectancies <- read_csv(file_path)
+```
+# Initial exploration
+
+```{r}
+str(National_Life_Expectancies)
+summary(National_Life_Expectancies)
+
+```
+# Missing Data Handling
+```{r}
+missing_summary <- National_Life_Expectancies %>%
+  miss_var_summary()
+print(missing_summary)
+```
+
+# Visualize missingness
+```{r}
+gg_miss_var(National_Life_Expectancies) +
+  labs(title = "Missing Data by Variable")
+```
+
+# Data Cleaning
+```{r}
+National_Life_Expectancies$COUNTRY <- iconv(National_Life_Expectancies$COUNTRY,
+                                            from = "", to = "UTF-8", sub = "byte")
+# Median imputation for key variables
+median_cols <- c("ILLITERATE", "POP", "FERTILITY", "PRIVATEHEALTH",
+                 "PUBLICEDUCATION", "HEALTHEXPEND", "BIRTHATTEND",
+                 "PHYSICIAN", "GDP", "SMOKING", "RESEARCHERS", "FEMALEBOSS")
+
+for(col in median_cols){
+  National_Life_Expectancies[[col]][is.na(National_Life_Expectancies[[col]])] <- 
+    median(National_Life_Expectancies[[col]], na.rm = TRUE)
+}
+
+cat("\n✓ Data cleaning complete. Missing values after imputation:\n")
+print(colSums(is.na(National_Life_Expectancies)))
+
+```
+# Examining the relation between y = LIFEEXP and x = FERTILITY.
+```{r}
+# Scatter plot with regression line
+p1 <- ggplot(National_Life_Expectancies, aes(x = FERTILITY, y = LIFEEXP)) +
+  geom_point(color = "steelblue", alpha = 0.6, size = 2.5) +
+  geom_smooth(method = "lm", color = "red", se = TRUE, linewidth = 1.2) +
+  labs(title = "Life Expectancy vs Fertility Rate",
+       subtitle = "Strong negative correlation observed",
+       x = "Fertility Rate (children per woman)",
+       y = "Life Expectancy (years)") +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold"))
+
+print(p1)
+```
+# Calculate correlation
+```{r}
+correlation <- cor(National_Life_Expectancies$FERTILITY, 
+                   National_Life_Expectancies$LIFEEXP, 
+                   use = "complete.obs")
+cat("\nCorrelation between FERTILITY and LIFEEXP:", round(correlation, 4), "\n")
+
+
+```
+
+# 2. Fit a linear regression model of LIFEEXP using the explanatory variable x = FERTILITY.
+
+## SIMPLE LINEAR REGRESSION MODEL
+```{r}
+model1 <- lm(LIFEEXP ~ FERTILITY, data = National_Life_Expectancies)
+summary(model1)
+```
+
+```{r}
+cat("\n--- MODEL INTERPRETATION ---\n")
+cat("Equation: LIFEEXP = ", round(coef(model1)[1], 2), " + ", 
+    round(coef(model1)[2], 2), " × FERTILITY\n", sep = "")
+cat("\nInterpretation for non-statisticians:\n")
+cat("• For every additional child per woman, life expectancy DECREASES by", 
+    abs(round(coef(model1)[2], 2)), "years\n")
+cat("• R-squared:", round(summary(model1)$r.squared, 4), 
+    "- meaning", round(summary(model1)$r.squared * 100, 1), 
+    "% of life expectancy variation is explained by fertility\n")
+
+```
+
+# 3. The United States has a FERTILITY rate of 2.0. Determine the fitted life expectancy.
+```{r}
+us_fertility <- data.frame(FERTILITY = 2.0)
+us_prediction <- predict(model1, newdata = us_fertility, interval = "confidence")
+
+cat("\nFor USA with fertility rate of 2.0:\n")
+cat("• Predicted Life Expectancy:", round(us_prediction[1], 2), "years\n")
+cat("• 95% Confidence Interval: [", round(us_prediction[2], 2), ",", 
+    round(us_prediction[3], 2), "] years\n")
+
+```
+# Multiple Linear Regression Analysis
+
+# 4. Now fit a regression model on LIFEEXP using three explanatory variables, FERTILITY,PUBLICEDUCATION, and lnHEALTH (the natural logarithmic transform of PRIVATEHEALTH).
+### a. Interpret the regression coefficient associated with public education.
+### b. Interpret the regression coefficient associated with health expenditures without using the logarithmic scale for expenditures.
+### c. Based on the model fit, is PUBLICEDUCATION a statistically significant variable? To respond to this question, use a formal test of hypothesis. State your null and alternative hypotheses, decision‐making criterion, and decision‐making rule.
+```{r}
+# ----------a. Interpret the regression coefficient associated with public education.-----#
+
+# Create log-transformed variable
+National_Life_Expectancies$lnHEALTH <- log(National_Life_Expectancies$PRIVATEHEALTH)
+
+# Fit multiple regression
+multiple_model <- lm(LIFEEXP ~ FERTILITY + PUBLICEDUCATION + lnHEALTH,
+                     data = National_Life_Expectancies)
+
+summary(multiple_model)
+```
+```{r}
+#-----b. Interpret the regression coefficient associated with health expenditures without using  the logarithmic scale for expenditures.-----#
+# Create the natural log of PRIVATEHEALTH
+National_Life_Expectancies$lnHEALTH <- log(National_Life_Expectancies$PRIVATEHEALTH)
+
+# Fit the multiple linear regression model
+multiple_model <- lm(LIFEEXP ~ FERTILITY + PUBLICEDUCATION + lnHEALTH,
+                     data = National_Life_Expectancies)
+
+# View the summary of the model
+summary(multiple_model)
+
+```
+```{r}
+#----c. Based on the model fit, is PUBLICEDUCATION a statistically significant variable? To respond to this question, use a formal test of hypothesis. State your null and alternative hypotheses, decision‐making criterion, and decision‐making rule-----#
+# Create the natural log of PRIVATEHEALTH
+National_Life_Expectancies$lnHEALTH <- log(National_Life_Expectancies$PRIVATEHEALTH)
+
+# Fit the multiple linear regression model
+multiple_model <- lm(LIFEEXP ~ FERTILITY + PUBLICEDUCATION + lnHEALTH,
+                     data = National_Life_Expectancies)
+
+# View the model summary to perform the hypothesis test
+summary(multiple_model)
+```
+
+```{r}
+
+# Correlation heatmap
+num_vars <- National_Life_Expectancies %>%
+  select(LIFEEXP, FERTILITY, PUBLICEDUCATION, PRIVATEHEALTH, HEALTHEXPEND, GDP) %>%
+  na.omit()
+
+corr_matrix <- cor(num_vars)
+ggcorrplot(corr_matrix, hc.order = TRUE, type = "lower",
+           lab = TRUE, lab_size = 3,
+           title = "Correlation Heatmap of Key Variables",
+           colors = c("#6D9EC1", "white", "#E46726"))
+
+```
+
+
+```{r}
+# Distribution of Life Expectancy
+ggplot(National_Life_Expectancies, aes(x = LIFEEXP)) +
+  geom_histogram(binwidth = 3, fill = "lightgreen", color = "black", alpha = 0.7) +
+  geom_vline(aes(xintercept = mean(LIFEEXP, na.rm = TRUE)), 
+             color = "red", linetype = "dashed", linewidth = 1) +
+  labs(title = "Distribution of Life Expectancy Across Countries",
+       subtitle = paste("Mean:", round(mean(National_Life_Expectancies$LIFEEXP, na.rm = TRUE), 1), "years"),
+       x = "Life Expectancy (Years)",
+       y = "Number of Countries") +
+  theme_minimal(base_size = 14)
+```
+
+# 7. Make an overall comment for the non‐statistician audience.
+Here are the key takeaways from my analysis, presented in a simple way:
+
+Babies and Life Expectancy: My findings show that when a country's average number of children per woman goes up, its life expectancy tends to go down. This is a very clear and reliable trend in the data.
+
+The Impact of Each Child: The analysis suggests that, on average, for every additional child a woman has, the life expectancy of that country is reduced by roughly 5 years.
+
+Trusting the Trend: The relationship I found is not a coincidence. My statistical tests show that this negative link between fertility and life expectancy is a statistically significant and important factor.
+
+# QUESTION 2: TERM LIFE INSURANCE ANALYSIS
+
+```{r}
+file_path <- "D:/Josina/McMaster University/201- Data Modeling/Final Project/TermLife.csv"
+Term_Life_Insurance <- read_csv(file_path)
+view(Term_Life_Insurance)
+```
+```{r}
+glimpse(Term_Life_Insurance)
+summary(Term_Life_Insurance[, c("GENDER", "AGE", "INCOME", "FACE")])
+```
+# EXPLORATORY VISUALIZATIONS
+# 1. How gender, age and income (explanatory variables) are related to FACE dependent variable) and each other.)
+```{r}
+# Gender vs FACE
+p_gender <- ggplot(Term_Life_Insurance, aes(x = factor(GENDER, labels = c("Female", "Male")), y = FACE)) +
+  geom_boxplot(fill = c("pink", "lightblue"), alpha = 0.7) +
+  labs(title = "Insurance Coverage by Gender",
+       x = "Gender", y = "Face Amount ($)") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma)
+```
+
+```{r}
+p_age <- ggplot(Term_Life_Insurance, aes(x = AGE, y = FACE)) +
+  geom_point(alpha = 0.4, color = "darkblue") +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  labs(title = "Insurance Coverage vs Age",
+       x = "Age (years)", y = "Face Amount ($)") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma)
+
+```
+
+```{r}
+# Income vs FACE
+p_income <- ggplot(Term_Life_Insurance, aes(x = INCOME, y = FACE)) +
+  geom_point(alpha = 0.4, color = "darkgreen") +
+  geom_smooth(method = "lm", se = TRUE, color = "orange") +
+  labs(title = "Insurance Coverage vs Income",
+       x = "Annual Income ($)", y = "Face Amount ($)") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma)
+```
+
+```{r}
+# Display plots
+grid.arrange(p_gender, p_age, p_income, ncol = 2)
+```
+# Correlation matrix for numerical variables
+
+
+```{r}
+
+numerical_vars <- Term_Life_Insurance %>% 
+  select(AGE, INCOME, FACE) %>%
+  na.omit()
+
+correlation_matrix <- cor(numerical_vars)
+print(round(correlation_matrix, 4))
+```
+# Visualize correlations
+```{r}
+
+ggcorrplot(correlation_matrix, 
+           lab = TRUE, 
+           title = "Correlation Between Age, Income, and Insurance Coverage")
+```
+
+#2. Can gender, age and income help explain the FACE
+### a. Run a multiple linear regression
+### b. Find the estimated regression parameters
+### c. Use Rsq, Rsq_Adj, MSE to show performance of explanatory variables
+### d. Use T‐test to show – how important the explanatory variables are
+
+```{r}
+clean_data <- Term_Life_Insurance %>%
+  filter(FACE > 0 & INCOME > 0)
+
+cat("Observations after cleaning:", nrow(clean_data), "\n")
+
+# --- Q2.2a: Fit Multiple Linear Regression ---
+model2 <- lm(FACE ~ GENDER + AGE + INCOME, data = clean_data)
+
+cat("\n--- MODEL SUMMARY ---\n")
+summary(model2)
+```
+
+```{r}
+# 2b: Estimated Regression Parameters
+coefficients_table <- summary(model2)$coefficients
+print(round(coefficients_table, 4))
+```
+```{r}
+cat("FACE = ", round(coef(model2)[1], 2), 
+    " + ", round(coef(model2)[2], 2), " × GENDER",
+    " + ", round(coef(model2)[3], 2), " × AGE",
+    " + ", round(coef(model2)[4], 2), " × INCOME\n", sep = "")
+```
+## 2c. Use Rsq, Rsq_Adj, MSE to show performance of explanatory variables
+```{r}
+r_squared <- summary(model2)$r.squared
+r_squared_adj <- summary(model2)$adj.r.squared
+mse <- mean(model2$residuals^2)
+rmse <- sqrt(mse)
+
+cat("R-squared:          ", round(r_squared, 4), 
+    " (", round(r_squared * 100, 2), "% variance explained)\n", sep = "")
+cat("Adjusted R-squared: ", round(r_squared_adj, 4), "\n")
+cat("MSE:                ", format(mse, big.mark = ",", scientific = FALSE), "\n")
+cat("RMSE:               ", format(rmse, big.mark = ",", scientific = FALSE), "\n")
+```
+### 2d. Use T‐test to show – how important the explanatory variables are
+```{r}
+# View regression coefficients and T-test results
+t_test_table <- summary(model2)$coefficients
+t_test_table
+
+```
+# 4.Write down your interpretation as necessary so that a non‐statistician can understand your explanation
+After running my analysis, I’ve come to a pretty clear conclusion: the variables I chose—gender, age, and income—are not great at predicting the FACE amount of a term life insurance policy.
+My graphs showed that there are no strong, simple relationships between the variables. I saw this confirmed in the model’s low R-squared value of 0.02, which means the model only explains about 2% of the variation in the FACE amount. In simple terms, this model is not very good at making predictions.
+The t-test gave me the most important insight. It showed that out of all the variables, only gender has a statistically significant relationship with the FACE amount. This means I can be confident that there’s a real connection there. The other two variables, age and income, don’t seem to have a reliable impact in this model.
+
+
+
+
